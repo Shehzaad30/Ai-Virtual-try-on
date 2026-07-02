@@ -10,7 +10,9 @@ export function rateLimit(key: string, limit: number, windowMs: number): boolean
 
   // Keep the map from growing unbounded on long-lived instances.
   if (buckets.size > 5000) {
-    for (const [k, b] of buckets) if (now > b.resetAt) buckets.delete(k);
+    buckets.forEach((b, k) => {
+      if (now > b.resetAt) buckets.delete(k);
+    });
   }
 
   const bucket = buckets.get(key);
