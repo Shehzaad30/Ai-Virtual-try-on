@@ -1,7 +1,14 @@
 import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 import { uploadBase64Image } from "@/lib/cloudinary";
 import { runTryOn } from "@/lib/replicate";
 import { rateLimit, clientIp } from "@/lib/rate-limit";
+
+// Auth-only client for verifying user access tokens (anon key is enough).
+const supabaseAuth = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 // Try-on inference can take a while; allow up to 5 minutes.
 export const maxDuration = 300;
@@ -20,8 +27,27 @@ function isValidImage(value: unknown): value is string {
 }
 
 export async function POST(req: Request) {
-  // Each generation costs real money on Replicate — cap per-IP volume.
-  if (!rateLimit(`try-on:${clientIp(req)}`, 10, 10 * 60 * 1000)) {
+  // Generations cost real money — only signed-in (email-verified) users may run them.
+  const token = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+  if (!token) {
+    return NextResponse.json(
+      { error: "Please sign in with your email to generate a try-on." },
+      { status: 401 }
+    );
+  }
+  const { data: userData, error: authError } = await supabaseAuth.auth.getUser(token);
+  if (authError || !userData?.user) {
+    return NextResponse.json(
+      { error: "Your session has expired. Please sign in again." },
+      { status: 401 }
+    );
+  }
+
+  // Cap volume per user and per IP.
+  if (
+    !rateLimit(`try-on:user:${userData.user.id}`, 10, 10 * 60 * 1000) ||
+    !rateLimit(`try-on:${clientIp(req)}`, 20, 10 * 60 * 1000)
+  ) {
     return NextResponse.json(
       { error: "You've made a lot of try-ons in a short time. Please wait a few minutes." },
       { status: 429 }

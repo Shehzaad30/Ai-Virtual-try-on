@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
+import { supabaseBrowser } from "@/lib/supabase-browser";
 
 type Slot = { preview: string | null; base64: string | null };
 const empty: Slot = { preview: null, base64: null };
@@ -87,6 +88,16 @@ function UploadZone({
 }
 
 type View = "after" | "before";
+type Auth =
+  | { status: "loading" }
+  | { status: "signedOut" }
+  | { status: "signedIn"; email: string };
+
+const otpInputStyle = {
+  backgroundColor: "var(--surface-container)",
+  border: "1px solid rgba(255,255,255,0.1)",
+  color: "var(--on-surface)",
+} as const;
 
 export default function TryOnPage() {
   const [person, setPerson] = useState<Slot>(empty);
@@ -95,6 +106,74 @@ export default function TryOnPage() {
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<View>("after");
+
+  // Email OTP auth — signup and login are the same flow.
+  const [auth, setAuth] = useState<Auth>({ status: "loading" });
+  const [otpStep, setOtpStep] = useState<"email" | "code">("email");
+  const [otpEmail, setOtpEmail] = useState("");
+  const [otpCode, setOtpCode] = useState("");
+  const [otpBusy, setOtpBusy] = useState(false);
+  const [otpError, setOtpError] = useState<string | null>(null);
+
+  useEffect(() => {
+    supabaseBrowser.auth.getSession().then(({ data }) => {
+      const email = data.session?.user?.email;
+      setAuth(email ? { status: "signedIn", email } : { status: "signedOut" });
+    });
+    const { data: sub } = supabaseBrowser.auth.onAuthStateChange((_event, session) => {
+      const email = session?.user?.email;
+      setAuth(email ? { status: "signedIn", email } : { status: "signedOut" });
+    });
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
+  const sendCode = useCallback(async () => {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(otpEmail)) {
+      setOtpError("Please enter a valid email address.");
+      return;
+    }
+    setOtpBusy(true);
+    setOtpError(null);
+    const { error: err } = await supabaseBrowser.auth.signInWithOtp({
+      email: otpEmail.trim(),
+      options: { shouldCreateUser: true },
+    });
+    setOtpBusy(false);
+    if (err) {
+      setOtpError(
+        /rate/i.test(err.message)
+          ? "Too many codes requested. Please wait a few minutes and try again."
+          : "Couldn't send the code. Please check the email and try again."
+      );
+      return;
+    }
+    setOtpStep("code");
+  }, [otpEmail]);
+
+  const verifyCode = useCallback(async () => {
+    if (otpCode.trim().length < 6) {
+      setOtpError("Enter the code from your email.");
+      return;
+    }
+    setOtpBusy(true);
+    setOtpError(null);
+    const { error: err } = await supabaseBrowser.auth.verifyOtp({
+      email: otpEmail.trim(),
+      token: otpCode.trim(),
+      type: "email",
+    });
+    setOtpBusy(false);
+    if (err) {
+      setOtpError("That code didn't match or has expired. Please try again.");
+      return;
+    }
+    setOtpCode("");
+    setOtpStep("email");
+  }, [otpEmail, otpCode]);
+
+  const signOut = useCallback(async () => {
+    await supabaseBrowser.auth.signOut();
+  }, []);
 
   const handleSelect = useCallback(async (setter: (s: Slot) => void, file: File) => {
     const b64 = await readFile(file);
@@ -109,14 +188,21 @@ export default function TryOnPage() {
     setError(null);
     setResult(null);
     try {
+      const { data } = await supabaseBrowser.auth.getSession();
+      const token = data.session?.access_token;
+      if (!token) throw new Error("Please sign in with your email to generate a try-on.");
+
       const res = await fetch("/api/try-on", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({ personImage: person.base64, garmentImage: garment.base64 }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Generation failed.");
-      setResult(data.resultUrl);
+      const resData = await res.json();
+      if (!res.ok) throw new Error(resData.error || "Generation failed.");
+      setResult(resData.resultUrl);
       setView("after");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong.");
@@ -166,40 +252,122 @@ export default function TryOnPage() {
         </div>
 
         <div className="p-6 mt-auto space-y-3">
-          <button
-            onClick={generate}
-            disabled={!canGenerate}
-            className="w-full py-4 rounded-full font-bold text-sm transition-all duration-200 disabled:opacity-35 disabled:cursor-not-allowed active:scale-95"
-            style={{
-              backgroundColor: "var(--primary-container)",
-              color: "var(--on-primary-container)",
-            }}
-          >
-            {loading ? (
-              <span className="flex items-center justify-center gap-2">
-                <span
-                  className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin"
-                  style={{ borderColor: "var(--on-primary-container)", borderTopColor: "transparent" }}
-                />
-                Generating…
-              </span>
-            ) : (
-              <span className="flex items-center justify-center gap-2">
-                <span className="material-symbols-outlined text-base">auto_awesome</span>
-                Generate Try-On
-              </span>
-            )}
-          </button>
+          {auth.status === "signedIn" && (
+            <>
+              <div className="flex items-center justify-between text-xs px-1">
+                <span className="truncate" style={{ color: "var(--on-surface-variant)" }} title={auth.email}>
+                  ✓ {auth.email}
+                </span>
+                <button onClick={signOut} className="shrink-0 ml-2 hover:underline" style={{ color: "var(--primary)" }}>
+                  Sign out
+                </button>
+              </div>
+
+              <button
+                onClick={generate}
+                disabled={!canGenerate}
+                className="w-full py-4 rounded-full font-bold text-sm transition-all duration-200 disabled:opacity-35 disabled:cursor-not-allowed active:scale-95"
+                style={{ backgroundColor: "var(--primary-container)", color: "var(--on-primary-container)" }}
+              >
+                {loading ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <span
+                      className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin"
+                      style={{ borderColor: "var(--on-primary-container)", borderTopColor: "transparent" }}
+                    />
+                    Generating…
+                  </span>
+                ) : (
+                  <span className="flex items-center justify-center gap-2">
+                    <span className="material-symbols-outlined text-base">auto_awesome</span>
+                    Generate Try-On
+                  </span>
+                )}
+              </button>
+
+              {!person.base64 && !garment.base64 && (
+                <p className="text-xs text-center" style={{ color: "var(--on-surface-variant)", opacity: 0.5 }}>
+                  Upload both photos to get started
+                </p>
+              )}
+            </>
+          )}
+
+          {auth.status === "signedOut" && (
+            <div
+              className="rounded-2xl p-4 space-y-3"
+              style={{ backgroundColor: "var(--surface-container)", border: "1px solid var(--outline-variant)" }}
+            >
+              <p className="text-sm font-semibold" style={{ color: "var(--on-surface)" }}>
+                Verify your email to try on
+              </p>
+              {otpStep === "email" ? (
+                <>
+                  <p className="text-xs" style={{ color: "var(--on-surface-variant)" }}>
+                    We&apos;ll email you a one-time code. No password needed.
+                  </p>
+                  <input
+                    type="email"
+                    placeholder="you@example.com"
+                    value={otpEmail}
+                    onChange={(e) => setOtpEmail(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && sendCode()}
+                    className="w-full px-4 py-3 rounded-xl text-sm outline-none"
+                    style={otpInputStyle}
+                  />
+                  <button
+                    onClick={sendCode}
+                    disabled={otpBusy}
+                    className="w-full py-3 rounded-full font-bold text-sm transition-all active:scale-95 disabled:opacity-50"
+                    style={{ backgroundColor: "var(--primary-container)", color: "var(--on-primary-container)" }}
+                  >
+                    {otpBusy ? "Sending…" : "Email me a code"}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <p className="text-xs" style={{ color: "var(--on-surface-variant)" }}>
+                    Enter the code sent to <strong>{otpEmail}</strong>.
+                  </p>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={8}
+                    placeholder="123456"
+                    value={otpCode}
+                    onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ""))}
+                    onKeyDown={(e) => e.key === "Enter" && verifyCode()}
+                    className="w-full px-4 py-3 rounded-xl text-sm outline-none tracking-[0.4em] text-center"
+                    style={otpInputStyle}
+                  />
+                  <button
+                    onClick={verifyCode}
+                    disabled={otpBusy}
+                    className="w-full py-3 rounded-full font-bold text-sm transition-all active:scale-95 disabled:opacity-50"
+                    style={{ backgroundColor: "var(--primary-container)", color: "var(--on-primary-container)" }}
+                  >
+                    {otpBusy ? "Verifying…" : "Verify & continue"}
+                  </button>
+                  <button
+                    onClick={() => { setOtpStep("email"); setOtpCode(""); setOtpError(null); }}
+                    className="w-full text-xs hover:underline"
+                    style={{ color: "var(--on-surface-variant)" }}
+                  >
+                    Use a different email
+                  </button>
+                </>
+              )}
+              {otpError && (
+                <p className="text-xs leading-relaxed" style={{ color: "#ffb4ab" }}>
+                  {otpError}
+                </p>
+              )}
+            </div>
+          )}
 
           {error && (
             <p className="text-xs text-center leading-relaxed" style={{ color: "#ffb4ab" }}>
               {error}
-            </p>
-          )}
-
-          {!person.base64 && !garment.base64 && (
-            <p className="text-xs text-center" style={{ color: "var(--on-surface-variant)", opacity: 0.5 }}>
-              Upload both photos to get started
             </p>
           )}
         </div>
