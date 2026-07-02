@@ -77,7 +77,7 @@ export default function Home() {
           </div>
 
           <p className="mt-5 text-sm" style={{ color: "var(--on-surface-variant)", opacity: 0.7 }}>
-            Try it yourself below — this is exactly what your customers would see
+            Try it yourself — this is exactly what your customers will see
           </p>
         </div>
       </section>

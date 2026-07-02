@@ -36,7 +36,7 @@ export default function Footer() {
       </div>
 
       <p className="text-sm" style={{ color: "var(--on-surface-variant)", opacity: 0.6 }}>
-        © 2024 Drapify AI. All rights reserved.
+        © 2026 Drapify AI. All rights reserved.
       </p>
     </footer>
   );
