@@ -27,8 +27,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ resultUrl, personUrl, garmentUrl });
   } catch (err) {
     console.error("try-on failed:", err);
-    const message =
-      err instanceof Error ? err.message : "Something went wrong generating the try-on.";
+
+    const raw = err instanceof Error ? err.message : "";
+    // Never surface billing/credit internals to end users (e.g. during a live demo).
+    const isCreditIssue = raw.includes("402") || /insufficient credit|payment required/i.test(raw);
+
+    const message = isCreditIssue
+      ? "Try-on is temporarily unavailable. Please try again in a few minutes."
+      : "Something went wrong generating the try-on. Please try again.";
+
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

@@ -173,7 +173,6 @@ export default function TryOnPage() {
             style={{
               backgroundColor: "var(--primary-container)",
               color: "var(--on-primary-container)",
-              boxShadow: canGenerate ? "0 0 22px rgba(124,58,237,0.4)" : "none",
             }}
           >
             {loading ? (
@@ -214,11 +213,10 @@ export default function TryOnPage() {
         <div className="relative w-full max-w-[440px]">
           {/* Canvas frame */}
           <div
-            className={`relative aspect-[3/4] w-full rounded-3xl overflow-hidden ${loading ? "scan-line" : ""}`}
+            className="relative aspect-[3/4] w-full rounded-3xl overflow-hidden"
             style={{
               backgroundColor: "var(--surface-container)",
               border: "1px solid rgba(255,255,255,0.07)",
-              boxShadow: result ? "0 0 40px rgba(124,58,237,0.2)" : undefined,
             }}
           >
             {/* Content */}
