@@ -1,27 +1,120 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap");
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #131313;
+  --surface: #131313;
+  --surface-container-lowest: #0e0e0e;
+  --surface-container-low: #1c1b1b;
+  --surface-container: #201f1f;
+  --surface-container-high: #2a2a2a;
+  --surface-container-highest: #353534;
+  --on-surface: #e5e2e1;
+  --on-surface-variant: #ccc3d8;
+  --outline: #958da1;
+  --outline-variant: #4a4455;
+  --primary: #d2bbff;
+  --primary-container: #7c3aed;
+  --on-primary-container: #ede0ff;
+  --secondary: #89ceff;
+  --secondary-container: #00a2e6;
+  --foreground: #e5e2e1;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  color-scheme: dark;
 }
 
 body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--background);
+  color: var(--on-surface);
+  font-family: "Inter", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #353534; border-radius: 4px; }
+
+@layer components {
+  .glass-card {
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-top-color: rgba(255, 255, 255, 0.15);
+    border-left-color: rgba(255, 255, 255, 0.15);
+  }
+
+  .btn-primary {
+    @apply px-7 py-3.5 rounded-full font-semibold text-sm transition-all duration-200 active:scale-95;
+    background-color: var(--primary-container);
+    color: var(--on-primary-container);
+    box-shadow: 0 0 0 0 rgba(124, 58, 237, 0);
+  }
+  .btn-primary:hover {
+    box-shadow: 0 0 22px rgba(124, 58, 237, 0.45);
+  }
+
+  .btn-ghost {
+    @apply px-7 py-3.5 rounded-full font-semibold text-sm transition-all duration-200 active:scale-95;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: var(--on-surface);
+  }
+  .btn-ghost:hover {
+    background: rgba(255, 255, 255, 0.05);
+  }
 }
 
 @layer utilities {
-  .text-balance {
-    text-wrap: balance;
+  .hero-gradient {
+    background: radial-gradient(circle at 60% 50%, rgba(124, 58, 237, 0.18) 0%, transparent 65%);
   }
+
+  .scan-line {
+    position: relative;
+    overflow: hidden;
+  }
+  .scan-line::after {
+    content: '';
+    position: absolute;
+    top: -100%;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(to bottom, transparent, rgba(210, 187, 255, 0.18), transparent);
+    animation: scan 3s infinite linear;
+    pointer-events: none;
+  }
+
+  .hover-glow:hover {
+    box-shadow: 0 0 24px rgba(124, 58, 237, 0.4);
+  }
+
+  .active-glow {
+    box-shadow: 0 0 18px rgba(124, 58, 237, 0.35);
+  }
+}
+
+@keyframes scan {
+  0%   { top: -100%; }
+  100% { top: 100%; }
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.rise { animation: rise 0.65s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .rise { animation: none; }
+  .scan-line::after { animation: none; }
 }
