@@ -5,6 +5,14 @@ type WaitlistLead = {
   city?: string | null;
 };
 
+// Escape user-supplied values before interpolating into email HTML,
+// so a malicious signup can't inject markup/links into the notification.
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!
+  );
+}
+
 /**
  * Emails the founder when a shop owner joins the waitlist.
  * Uses Resend's REST API (no SDK dependency). If email isn't configured
@@ -26,7 +34,7 @@ export async function sendWaitlistNotification(lead: WaitlistLead): Promise<void
   ]
     .map(
       ([k, v]) =>
-        `<tr><td style="padding:6px 12px;font-weight:600;color:#555">${k}</td><td style="padding:6px 12px">${v}</td></tr>`
+        `<tr><td style="padding:6px 12px;font-weight:600;color:#555">${k}</td><td style="padding:6px 12px">${escapeHtml(v)}</td></tr>`
     )
     .join("");
 
